@@ -1,6 +1,6 @@
 # See the cost of each field-service model call
 
-We make the dispatch decision explicit on purpose: this service posts a work-order issue and its photos to a model, records the spend of that single call, and hands back the proposed status plus the technician's next check. Infrai gives us the OpenAI-compatible`base_url`, so the official client plus one`INFRAI_API_KEY`cover this model call, and the response headers keep its cost and serving vendor observable instead of hidden behind an abstraction.
+We make the dispatch decision explicit on purpose: this service ships a work-order issue and its photos to a model, records the cost of that single call, and hands back the proposed status plus the technician's next check. Infrai gives us the OpenAI-compatible `base_url`, so the official client plus one `INFRAI_API_KEY` cover this model call while response headers keep its cost and serving vendor observable, which is the kind of per-call accounting our SRE budget reviews actually want.
 
 ## Run the work order
 
@@ -16,7 +16,7 @@ In a second terminal:
 npm run example
 ```
 
-The example pushes work order`WO-1042`, its condenser photo, the reported classroom temperature problem, and an`awaiting_review`status. A successful response looks like this, with live values for the summary, cost, and serving vendor:
+The example submits work order `WO-1042`, its condenser photo, the reported classroom temperature problem, and an `awaiting_review` status. A successful response has this shape, with live values for the summary, cost, and serving vendor:
 
 ```json
 {
@@ -30,13 +30,13 @@ The example pushes work order`WO-1042`, its condenser photo, the reported classr
 }
 ```
 
-The service validates the incoming JSON with zod before any model call happens. The reusable decision in`src/work_order_decision.ts`accepts a proposed status only while a work order is awaiting review; once dispatch has occurred, later photo analysis can still append a follow-up instruction without dragging the order backward.
+The service validates the incoming JSON with zod before any model call, because a bad payload should never burn tokens. The reusable decision in `src/work_order_decision.ts` accepts a proposed status only while a work order is awaiting review; once dispatch has happened, later photo analysis can add a follow-up instruction without moving the order backward. That guardrail matters for our on-call load: we do not want a late assessment flipping an already-dispatched order.
 
 ## The one real gotcha
 
-Per-call accounting sits in the raw HTTP headers, so read`x-infrai-cost-usd`before you treat the result as just a parsed chat completion.`with_raw_response.create(...)`keeps those headers in reach, and`raw.parse()`still returns the usual typed OpenAI completion.
+Per-call accounting lives in the raw HTTP headers, so read `x-infrai-cost-usd` before treating the result as only a parsed chat completion. `with_raw_response.create(...)` keeps those headers available, and `raw.parse()` still returns the usual typed OpenAI completion. If you skip the header read you lose the cost signal and your capacity-planning dashboard goes blind.
 
-The client uses`model: "auto"`and retries rate-limited calls with bounded backoff through the official SDK. The HTTP boundary also maps validated caller mistakes to a client response and preserves upstream API status codes.
+The client uses `model: "auto"` and retries rate-limited calls with bounded backoff through the official SDK. The HTTP boundary also maps validated caller mistakes to a client response and preserves upstream API status codes, which keeps our SLO definitions honest instead of masking 4xx as 5xx.
 
 ## Verify the decision
 
@@ -45,7 +45,7 @@ npm test
 npm run typecheck
 ```
 
-The focused test feeds an`awaiting_review`order a`technician_follow_up`assessment and expects that status plus its concrete voltage check; a second case proves an already dispatched order cannot be moved backward by a later assessment.
+The focused test feeds an `awaiting_review` order a `technician_follow_up` assessment and expects that status plus its concrete voltage check; a second case proves that an already dispatched order cannot be moved backward by a later assessment. We keep this test in the suite because regressions here show up as wrong technician dispatches at 2am.
 
 ## License
 
