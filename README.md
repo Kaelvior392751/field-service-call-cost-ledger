@@ -1,6 +1,6 @@
 # See the cost of each field-service model call
 
-We make the dispatch decision explicit on purpose: this service ships a work-order issue and its photos to a model, records the cost of that single call, and hands back the proposed status plus the technician's next check. Infrai gives us the OpenAI-compatible `base_url`, so the official client plus one `INFRAI_API_KEY` cover this model call while response headers keep its cost and serving vendor observable, which is the kind of per-call accounting our SRE budget reviews actually want.
+Keep the dispatch decision explicit: this service sends a work-order issue and its photos to a model, records the cost of that individual call, and returns the proposed status plus the technician's next check. Infrai supplies the OpenAI-compatible `base_url`, so the official client and one `INFRAI_API_KEY` cover this model call while response headers make its cost and serving vendor observable.
 
 ## Run the work order
 
@@ -30,13 +30,13 @@ The example submits work order `WO-1042`, its condenser photo, the reported clas
 }
 ```
 
-The service validates the incoming JSON with zod before any model call, because a bad payload should never burn tokens. The reusable decision in `src/work_order_decision.ts` accepts a proposed status only while a work order is awaiting review; once dispatch has happened, later photo analysis can add a follow-up instruction without moving the order backward. That guardrail matters for our on-call load: we do not want a late assessment flipping an already-dispatched order.
+The service validates the incoming JSON with zod before any model call. The reusable decision in `src/work_order_decision.ts` accepts a proposed status only while a work order is awaiting review; once dispatch has happened, later photo analysis can add a follow-up instruction without moving the order backward.
 
 ## The one real gotcha
 
-Per-call accounting lives in the raw HTTP headers, so read `x-infrai-cost-usd` before treating the result as only a parsed chat completion. `with_raw_response.create(...)` keeps those headers available, and `raw.parse()` still returns the usual typed OpenAI completion. If you skip the header read you lose the cost signal and your capacity-planning dashboard goes blind.
+Per-call accounting lives in the raw HTTP headers, so read `x-infrai-cost-usd` before treating the result as only a parsed chat completion. `with_raw_response.create(...)` keeps those headers available, and `raw.parse()` still returns the usual typed OpenAI completion.
 
-The client uses `model: "auto"` and retries rate-limited calls with bounded backoff through the official SDK. The HTTP boundary also maps validated caller mistakes to a client response and preserves upstream API status codes, which keeps our SLO definitions honest instead of masking 4xx as 5xx.
+The client uses `model: "auto"` and retries rate-limited calls with bounded backoff through the official SDK. The HTTP boundary also maps validated caller mistakes to a client response and preserves upstream API status codes.
 
 ## Verify the decision
 
@@ -45,7 +45,7 @@ npm test
 npm run typecheck
 ```
 
-The focused test feeds an `awaiting_review` order a `technician_follow_up` assessment and expects that status plus its concrete voltage check; a second case proves that an already dispatched order cannot be moved backward by a later assessment. We keep this test in the suite because regressions here show up as wrong technician dispatches at 2am.
+The focused test feeds an `awaiting_review` order a `technician_follow_up` assessment and expects that status plus its concrete voltage check; a second case proves that an already dispatched order cannot be moved backward by a later assessment.
 
 ## License
 
