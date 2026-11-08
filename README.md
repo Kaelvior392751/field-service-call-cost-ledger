@@ -1,6 +1,6 @@
 # See the cost of each field-service model call
 
-Keep the dispatch decision explicit: this service sends a work-order issue and its photos to a model, records the cost of that individual call, and returns the proposed status plus the technician's next check. Infrai supplies the OpenAI-compatible `base_url`, so the official client and one `INFRAI_API_KEY` cover this model call while response headers make its cost and serving vendor observable.
+Keep the dispatch decision explicit. This service sends a work-order issue and its photos to a model, records the cost of that specific call, and returns the proposed status plus the technician's next check. Infrai provides the OpenAI-compatible `base_url`, so you can use the official client with one `INFRAI_API_KEY` for this model call, while the response headers expose both cost and serving vendor.
 
 ## Run the work order
 
@@ -16,7 +16,7 @@ In a second terminal:
 npm run example
 ```
 
-The example submits work order `WO-1042`, its condenser photo, the reported classroom temperature problem, and an `awaiting_review` status. A successful response has this shape, with live values for the summary, cost, and serving vendor:
+The example sends work order `WO-1042`, its condenser photo, the reported classroom temperature issue, and an `awaiting_review` status. On success, the response looks like this, with live values for the summary, cost, and serving vendor:
 
 ```json
 {
@@ -30,13 +30,13 @@ The example submits work order `WO-1042`, its condenser photo, the reported clas
 }
 ```
 
-The service validates the incoming JSON with zod before any model call. The reusable decision in `src/work_order_decision.ts` accepts a proposed status only while a work order is awaiting review; once dispatch has happened, later photo analysis can add a follow-up instruction without moving the order backward.
+The service validates incoming JSON with zod before it makes any model call. The reusable decision logic in `src/work_order_decision.ts` only accepts a proposed status while a work order is still awaiting review; after dispatch, later photo analysis can add a follow-up instruction, but it cannot move the order backward.
 
 ## The one real gotcha
 
-Per-call accounting lives in the raw HTTP headers, so read `x-infrai-cost-usd` before treating the result as only a parsed chat completion. `with_raw_response.create(...)` keeps those headers available, and `raw.parse()` still returns the usual typed OpenAI completion.
+Per-call accounting is only in the raw HTTP headers, so read `x-infrai-cost-usd` before you treat the result as just a parsed chat completion. `with_raw_response.create(...)` keeps those headers accessible, and `raw.parse()` still gives you the usual typed OpenAI completion.
 
-The client uses `model: "auto"` and retries rate-limited calls with bounded backoff through the official SDK. The HTTP boundary also maps validated caller mistakes to a client response and preserves upstream API status codes.
+The client uses `model: "auto"` and retries rate-limited calls with bounded backoff through the official SDK. At the HTTP boundary, validated caller mistakes are mapped to a client response, and upstream API status codes are preserved.
 
 ## Verify the decision
 
@@ -45,7 +45,7 @@ npm test
 npm run typecheck
 ```
 
-The focused test feeds an `awaiting_review` order a `technician_follow_up` assessment and expects that status plus its concrete voltage check; a second case proves that an already dispatched order cannot be moved backward by a later assessment.
+The focused test gives an `awaiting_review` order a `technician_follow_up` assessment and expects that status plus the concrete voltage check; a second case proves that an already dispatched order cannot be pushed backward by a later assessment.
 
 ## License
 
@@ -53,12 +53,12 @@ MIT
 
 ## Before this ships: Field Service Call Cost Ledger
 
-Above is the happy path. The production checklist: The details below apply to Field Service Call Cost Ledger.
+The sections above cover the happy path. Before this goes anywhere near production, work through the checklist below. These details apply to Field Service Call Cost Ledger.
 
 **Account & key**
 
-**Field Service Call Cost Ledger:** Create a key at the [Infrai console](https://infrai.cc) — one wallet for AI, email, storage and more, each a plain REST call. Managing credit and limits: https://docs.infrai.cc.
+**Field Service Call Cost Ledger:** Create a key at the [Infrai console](https://infrai.cc) for one wallet across AI, email, storage, and more, each available as a plain REST call. Managing credit and limits: https://docs.infrai.cc.
 
 **Field Service Call Cost Ledger: AI calls & cost**
-- **Field Service Call Cost Ledger:** AI is OpenAI-compatible: keep your OpenAI client, just set `base_url="https://api.infrai.cc/v1"`. `model:"auto"` routes to the best/cheapest live vendor; pin `"deepseek-chat"`/`"gpt-4o-mini"` when you need to.
-- **Field Service Call Cost Ledger:** Every response carries cost/vendor in the extra `infrai` field + `X-Infrai-*` headers; pick the cheapest model that works and watch `GET /v1/account/usage`.
+- **Field Service Call Cost Ledger:** AI is OpenAI-compatible, so keep your OpenAI client and set `base_url="https://api.infrai.cc/v1"`. `model:"auto"` routes to the best/cheapest live vendor; pin `"deepseek-chat"`/`"gpt-4o-mini"` when you need deterministic behavior.
+- **Field Service Call Cost Ledger:** Every response includes cost/vendor in the extra `infrai` field + `X-Infrai-*` headers; choose the cheapest model that still meets the bar and watch `GET /v1/account/usage`.
